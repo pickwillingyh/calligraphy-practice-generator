@@ -314,7 +314,9 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
     current_y = page_height - margin_top
 
     for chapter in daodejing_data:
-        if current_y - (20 + grid_size * 2 + row_gap) < margin_top:
+        # 检查是否有足够空间放置章节标题
+        # 如果连标题都放不下，才换页
+        if current_y - 20 < margin_top:
             c.showPage()
             current_y = page_height - margin_top
 
@@ -333,67 +335,10 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
         print(f"章节 {chapter['title']}: 每行最多 {max_chars_per_line} 个字")
         sys.stdout.flush()
 
-        # 按最大字数分割长文本
+        # 简单按最大字数分割，不进行逗号或四字边界检查
         lines = []
-        text_to_split = combined_text
-        max_iterations = 100
-        iteration = 0
-        hard_splits = 0  # 记录硬分割次数
-        while text_to_split and iteration < max_iterations:
-            iteration += 1
-            if len(text_to_split) <= max_chars_per_line:
-                lines.append(text_to_split)
-                break
-            else:
-                # 尽量在逗号处分割
-                split_pos = max_chars_per_line
-                found_comma = False
-                # 向前查找逗号
-                for i in range(min(max_chars_per_line, len(text_to_split)-1), 0, -1):
-                    if text_to_split[i] == '，':
-                        split_pos = i + 1  # 包含逗号
-                        found_comma = True
-                        break
-
-                if not found_comma:
-                    # 尝试在四字词语边界分割（古汉语常见）
-                    # 查找在max_chars_per_line附近的四字边界
-                    best_split_pos = max_chars_per_line
-                    # 尝试向后查找合适的边界（不超过4个字）
-                    for offset in range(0, 5):
-                        if best_split_pos + offset < len(text_to_split):
-                            # 检查是否在四字边界（每4个字一个潜在边界）
-                            if (best_split_pos + offset) % 4 == 0:
-                                best_split_pos = best_split_pos + offset
-                                break
-
-                    # 如果找不到四字边界，尝试向前查找
-                    if best_split_pos == max_chars_per_line:
-                        for offset in range(0, -5, -1):
-                            if best_split_pos + offset > 0:
-                                if (best_split_pos + offset) % 4 == 0:
-                                    best_split_pos = best_split_pos + offset
-                                    break
-
-                    # 确保分割位置在合理范围内
-                    if best_split_pos <= 0:
-                        best_split_pos = max_chars_per_line
-                    if best_split_pos >= len(text_to_split):
-                        best_split_pos = len(text_to_split) - 1
-
-                    split_pos = best_split_pos
-                    hard_splits += 1
-
-                lines.append(text_to_split[:split_pos])
-                text_to_split = text_to_split[split_pos:]
-                # 如果分割后剩余部分以逗号开头，去掉逗号
-                if text_to_split.startswith('，'):
-                    text_to_split = text_to_split[1:]
-        if iteration >= max_iterations:
-            print(f"警告：章节 {chapter['title']} 文本分割可能陷入无限循环")
-
-        if hard_splits > 0:
-            print(f"  注意：有 {hard_splits} 处硬分割（在非逗号处断开）")
+        for i in range(0, len(combined_text), max_chars_per_line):
+            lines.append(combined_text[i:i + max_chars_per_line])
 
         # 调试信息：显示分割后的行
         print(f"  分割为 {len(lines)} 行")
@@ -428,8 +373,8 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
 
             current_y = y_pos_row2 - row_gap
 
-        # 章节间距减小
-        current_y -= 8  # 章节间距减小
+        # 章节间距：最多空一行
+        current_y -= row_gap  # 章节间距设置为行间距大小
 
     c.save()
     print(f"成功：{filename}")
@@ -450,7 +395,9 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
     current_y = page_height - margin_top
 
     for chapter in daodejing_data:
-        if current_y - (20 + grid_size * 2 + row_gap) < margin_top:
+        # 检查是否有足够空间放置章节标题
+        # 如果连标题都放不下，才换页
+        if current_y - 20 < margin_top:
             c.showPage()
             current_y = page_height - margin_top
 
@@ -467,67 +414,10 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
         max_chars_per_line = int((page_width - 2 * margin_left) / (grid_size + grid_gap))
         print(f"1.5cm版本 章节 {chapter['title']}: 每行最多 {max_chars_per_line} 个字")
 
-        # 按最大字数分割长文本
+        # 简单按最大字数分割，不进行逗号或四字边界检查
         lines = []
-        text_to_split = combined_text
-        max_iterations = 100
-        iteration = 0
-        hard_splits = 0  # 记录硬分割次数
-        while text_to_split and iteration < max_iterations:
-            iteration += 1
-            if len(text_to_split) <= max_chars_per_line:
-                lines.append(text_to_split)
-                break
-            else:
-                # 尽量在逗号处分割
-                split_pos = max_chars_per_line
-                found_comma = False
-                # 向前查找逗号
-                for i in range(min(max_chars_per_line, len(text_to_split)-1), 0, -1):
-                    if text_to_split[i] == '，':
-                        split_pos = i + 1  # 包含逗号
-                        found_comma = True
-                        break
-
-                if not found_comma:
-                    # 尝试在四字词语边界分割（古汉语常见）
-                    # 查找在max_chars_per_line附近的四字边界
-                    best_split_pos = max_chars_per_line
-                    # 尝试向后查找合适的边界（不超过4个字）
-                    for offset in range(0, 5):
-                        if best_split_pos + offset < len(text_to_split):
-                            # 检查是否在四字边界（每4个字一个潜在边界）
-                            if (best_split_pos + offset) % 4 == 0:
-                                best_split_pos = best_split_pos + offset
-                                break
-
-                    # 如果找不到四字边界，尝试向前查找
-                    if best_split_pos == max_chars_per_line:
-                        for offset in range(0, -5, -1):
-                            if best_split_pos + offset > 0:
-                                if (best_split_pos + offset) % 4 == 0:
-                                    best_split_pos = best_split_pos + offset
-                                    break
-
-                    # 确保分割位置在合理范围内
-                    if best_split_pos <= 0:
-                        best_split_pos = max_chars_per_line
-                    if best_split_pos >= len(text_to_split):
-                        best_split_pos = len(text_to_split) - 1
-
-                    split_pos = best_split_pos
-                    hard_splits += 1
-
-                lines.append(text_to_split[:split_pos])
-                text_to_split = text_to_split[split_pos:]
-                # 如果分割后剩余部分以逗号开头，去掉逗号
-                if text_to_split.startswith('，'):
-                    text_to_split = text_to_split[1:]
-        if iteration >= max_iterations:
-            print(f"警告：章节 {chapter['title']} 文本分割可能陷入无限循环")
-
-        if hard_splits > 0:
-            print(f"  注意：有 {hard_splits} 处硬分割（在非逗号处断开）")
+        for i in range(0, len(combined_text), max_chars_per_line):
+            lines.append(combined_text[i:i + max_chars_per_line])
 
         # 调试信息：显示分割后的行
         print(f"  分割为 {len(lines)} 行")
@@ -562,8 +452,8 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
 
             current_y = y_pos_row2 - row_gap
 
-        # 章节间距减小
-        current_y -= 8  # 章节间距减小
+        # 章节间距：最多空一行
+        current_y -= row_gap  # 章节间距设置为行间距大小
 
     c.save()
     print(f"成功生成1.5cm版本：{filename}")
