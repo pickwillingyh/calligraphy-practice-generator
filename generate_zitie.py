@@ -428,23 +428,6 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
 
             current_y = y_pos_row2 - row_gap
 
-        # 章节结束后，如果页面还有空间，填充空白田字格
-        # 计算一行田字格所需的高度
-        needed_height = (grid_size * 2) + row_gap
-        while current_y - needed_height >= margin_top:
-            # 填充一行空白田字格
-            x_pos = margin_left
-            y_pos_row1 = current_y - grid_size
-            y_pos_row2 = y_pos_row1 - grid_size
-
-            # 绘制空白田字格（没有文字）
-            for _ in range(max_chars_per_line):
-                draw_mi_zi_ge(c, x_pos, y_pos_row1, grid_size)
-                draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
-                x_pos += grid_size + grid_gap
-
-            current_y = y_pos_row2 - row_gap
-
         # 章节间距减小
         current_y -= 8  # 章节间距减小
 
@@ -574,23 +557,6 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
             x_pos = margin_left
             y_pos_row2 = y_pos_row1 - grid_size
             for _ in line_text:
-                draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
-                x_pos += grid_size + grid_gap
-
-            current_y = y_pos_row2 - row_gap
-
-        # 章节结束后，如果页面还有空间，填充空白田字格
-        # 计算一行田字格所需的高度
-        needed_height = (grid_size * 2) + row_gap
-        while current_y - needed_height >= margin_top:
-            # 填充一行空白田字格
-            x_pos = margin_left
-            y_pos_row1 = current_y - grid_size
-            y_pos_row2 = y_pos_row1 - grid_size
-
-            # 绘制空白田字格（没有文字）
-            for _ in range(max_chars_per_line):
-                draw_mi_zi_ge(c, x_pos, y_pos_row1, grid_size)
                 draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
                 x_pos += grid_size + grid_gap
 
