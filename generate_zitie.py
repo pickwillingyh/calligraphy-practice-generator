@@ -299,6 +299,75 @@ def draw_mi_zi_ge(canvas_obj, x, y, size):
     canvas_obj.line(x, y + size, x + size, y)
     canvas_obj.setDash()
 
+def calculate_text_position(canvas_obj, char, font_name, font_size, grid_x, grid_y, grid_size):
+    """计算文字在米字格中的精确居中位置"""
+    try:
+        # 获取字体度量
+        font = pdfmetrics.getFont(font_name)
+        if hasattr(font, 'face'):
+            # TTF字体：单位为1/1000 em
+            ascent = font.face.ascent * font_size / 1000.0
+            descent = font.face.descent * font_size / 1000.0
+        else:
+            # 回退值：基于经验比例
+            ascent = font_size * 0.85
+            descent = font_size * 0.15
+    except:
+        # 回退机制
+        ascent = font_size * 0.85
+        descent = font_size * 0.15
+
+    # 计算字符宽度用于水平居中
+    char_width = canvas_obj.stringWidth(char, font_name, font_size)
+    text_x = grid_x + (grid_size - char_width) / 2
+
+    # 计算垂直居中
+    # 字符的垂直范围：从 baseline+descent 到 baseline+ascent (descent通常为负)
+    # 字符中心位置：baseline + (ascent + descent) / 2
+    # 格子中心位置：grid_y + grid_size / 2
+    # 令字符中心对齐格子中心：baseline + (ascent + descent) / 2 = grid_y + grid_size / 2
+    # 因此：baseline = grid_y + grid_size / 2 - (ascent + descent) / 2
+    text_y_baseline = (grid_y + grid_size / 2) - (ascent + descent) / 2
+
+    return text_x, text_y_baseline
+
+def draw_line_with_padding(canvas_obj, line_text, max_chars_per_line, x_start, y_row1,
+                          grid_size, grid_gap, font_name, font_size, is_last_line=False):
+    """绘制一行文字，章节最后一行时填充空白米字格"""
+
+    # 章节最后一行时填充空白格子
+    if is_last_line and len(line_text) < max_chars_per_line:
+        # 扩展行到最大长度（用None表示空白）
+        padded_chars = list(line_text) + [None] * (max_chars_per_line - len(line_text))
+    else:
+        padded_chars = list(line_text)
+
+    x_pos = x_start
+
+    # 第一行：绘制米字格和文字（如有）
+    for char in padded_chars:
+        draw_mi_zi_ge(canvas_obj, x_pos, y_row1, grid_size)
+
+        if char is not None:  # 有文字时绘制
+            canvas_obj.setFont(font_name, font_size)
+            canvas_obj.setFillColor(colors.HexColor('#B0B0B0'))
+
+            text_x, text_y = calculate_text_position(
+                canvas_obj, char, font_name, font_size, x_pos, y_row1, grid_size
+            )
+            canvas_obj.drawString(text_x, text_y, char)
+
+        x_pos += grid_size + grid_gap
+
+    # 第二行：绘制空白米字格
+    x_pos = x_start
+    y_row2 = y_row1 - grid_size  # row_gap=0，直接相邻
+    for _ in padded_chars:
+        draw_mi_zi_ge(canvas_obj, x_pos, y_row2, grid_size)
+        x_pos += grid_size + grid_gap
+
+    return y_row2  # 返回下一行的起始Y坐标
+
 def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
     page_width, page_height = a4
     c = NumberedCanvas(filename, pagesize=a4)
@@ -358,10 +427,7 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
                 if FONT_NAME != "Helvetica":
                     c.setFont(FONT_NAME, grid_size * 0.68)  # 字体大小为格子的68%
                     c.setFillColor(colors.HexColor('#B0B0B0'))
-
-                    char_width = c.stringWidth(char, FONT_NAME, grid_size * 0.68)
-                    text_x = x_pos + (grid_size - char_width) / 2
-                    text_y = y_pos_row1 + (grid_size * 0.20)  # 调整垂直位置
+                    text_x, text_y = calculate_text_position(c, char, FONT_NAME, grid_size * 0.68, x_pos, y_pos_row1, grid_size)
                     c.drawString(text_x, text_y, char)
                 x_pos += grid_size + grid_gap
 
@@ -437,10 +503,7 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
                 if FONT_NAME != "Helvetica":
                     c.setFont(FONT_NAME, grid_size * 0.68)  # 字体大小为格子的68%
                     c.setFillColor(colors.HexColor('#B0B0B0'))
-
-                    char_width = c.stringWidth(char, FONT_NAME, grid_size * 0.68)
-                    text_x = x_pos + (grid_size - char_width) / 2
-                    text_y = y_pos_row1 + (grid_size * 0.20)  # 调整垂直位置
+                    text_x, text_y = calculate_text_position(c, char, FONT_NAME, grid_size * 0.68, x_pos, y_pos_row1, grid_size)
                     c.drawString(text_x, text_y, char)
                 x_pos += grid_size + grid_gap
 
@@ -458,20 +521,96 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
     c.save()
     print(f"成功生成1.5cm版本：{filename}")
 
+
+def generate_full_pdf_2_5cm(filename="daodejing_full_calligraphy_2_5cm.pdf"):
+    """生成2.5cm格子版本"""
+    page_width, page_height = a4
+    c = NumberedCanvas(filename, pagesize=a4)
+
+    # 目标：打印后格子大小约2.5cm×2.5cm
+    # 2.5cm ≈ 71点 (1点=1/72英寸≈0.3528mm, 25mm/0.3528≈71点)
+    margin_left = 15      # 显著减小边距以提高纸张利用率
+    margin_top = 25       # 显著减小边距以提高纸张利用率
+    grid_size = 71        # 2.5cm打印大小
+    grid_gap = 2          # 字间距（保持现有）
+    row_gap = 0           # 行间距设为0
+    font_size = int(grid_size * 0.68)  # 字体大小为格子的68%
+
+    current_y = page_height - margin_top
+
+    for chapter in daodejing_data:
+        # 检查是否有足够空间放置章节标题
+        # 如果连标题都放不下，才换页
+        if current_y - 20 < margin_top:
+            c.showPage()
+            current_y = page_height - margin_top
+
+        if FONT_NAME != "Helvetica":
+            c.setFont(FONT_NAME, 14)  # 章节标题字体
+            c.setFillColor(colors.HexColor('#333333'))
+            c.drawString(margin_left, current_y - 12, f"■ {chapter['title']}")
+            current_y -= 20
+
+        # 将本章所有内容用中文逗号连接起来
+        combined_text = "，".join(chapter['content'])
+
+        # 计算每行最大字数
+        max_chars_per_line = int((page_width - 2 * margin_left) / (grid_size + grid_gap))
+        print(f"2.5cm版本 章节 {chapter['title']}: 每行最多 {max_chars_per_line} 个字")
+
+        # 简单按最大字数分割，不进行逗号或四字边界检查
+        lines = []
+        for i in range(0, len(combined_text), max_chars_per_line):
+            lines.append(combined_text[i:i + max_chars_per_line])
+
+        # 调试信息：显示分割后的行
+        print(f"  分割为 {len(lines)} 行")
+        sys.stdout.flush()
+
+        # 逐行绘制，章节最后一行时进行空白填充
+        for line_idx, line_text in enumerate(lines):
+            is_last_line = (line_idx == len(lines) - 1)
+
+            # 空间检查（行间距为0，只需要grid_size * 2的高度）
+            needed_height = grid_size * 2
+            if current_y - needed_height < margin_top:
+                c.showPage()
+                current_y = page_height - margin_top
+
+            # 绘制行（使用带填充的函数）
+            y_pos_row1 = current_y - grid_size
+            y_row2 = draw_line_with_padding(c, line_text, max_chars_per_line,
+                                           margin_left, y_pos_row1,
+                                           grid_size, grid_gap, FONT_NAME, font_size,
+                                           is_last_line=is_last_line)
+            current_y = y_row2  # row_gap=0，直接使用y_row2
+
+        # 章节间距：半格高度
+        chapter_gap = grid_size // 2
+        current_y -= chapter_gap
+
+    c.save()
+    print(f"成功生成2.5cm版本：{filename}")
+
 if __name__ == "__main__":
     print("开始生成《道德经》字帖...")
     print("=" * 50)
 
     # 生成2cm格子版本
-    print("\n【1/2】生成2cm格子版本...")
+    print("\n【1/3】生成2cm格子版本...")
     generate_full_pdf()
 
     # 生成1.5cm格子版本
-    print("\n【2/2】生成1.5cm格子版本...")
+    print("\n【2/3】生成1.5cm格子版本...")
     generate_full_pdf_1_5cm()
+
+    # 生成2.5cm格子版本
+    print("\n【3/3】生成2.5cm格子版本...")
+    generate_full_pdf_2_5cm()
 
     print("\n" + "=" * 50)
     print("所有版本生成完成！")
     print("请查看当前目录下的PDF文件：")
     print("- daodejing_full_calligraphy.pdf (2cm格子)")
     print("- daodejing_full_calligraphy_1_5cm.pdf (1.5cm格子)")
+    print("- daodejing_full_calligraphy_2_5cm.pdf (2.5cm格子)")
