@@ -1,7 +1,8 @@
+import argparse
+import io
 import os
 import requests
 import sys
-import io
 if sys.platform.startswith('win'):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 from reportlab.lib.pagesizes import A4 as a4
@@ -175,6 +176,15 @@ def setup_font():
 FONT_NAME = setup_font()
 
 # -------------------------------------------------------------------------
+# 1.5 排版配置开关
+# -------------------------------------------------------------------------
+# 是否在每行文字下方绘制一行「练习用的空白米字格」（用于临摹练习）
+#   True  = 绘制练习行（默认，传统字帖样式：一行描红 + 一行空白练习格）
+#   False = 不绘制练习行，只保留带文字的米字格（描红行）
+# 命令行可用 --no-practice-row 覆盖；函数级可用 practice_row 参数覆盖
+ADD_PRACTICE_ROW = True
+
+# -------------------------------------------------------------------------
 # 2. 完整的《道德经》八十一章数据
 # -------------------------------------------------------------------------
 daodejing_data = [
@@ -332,10 +342,15 @@ def calculate_text_position(canvas_obj, char, font_name, font_size, grid_x, grid
     return text_x, text_y_baseline
 
 def draw_line_with_padding(canvas_obj, line_text, max_chars_per_line, x_start, y_row1,
-                          grid_size, grid_gap, font_name, font_size, is_last_line=False):
-    """绘制一行文字，章节最后一行时填充空白米字格"""
+                          grid_size, grid_gap, font_name, font_size, is_last_line=False,
+                          practice_row=True):
+    """绘制一行文字，可选在其下方绘制一行练习用空白米字格。
 
-    # 章节最后一行时填充空白格子
+    practice_row: True 时在文字下方绘制一行空白米字格用于练习，
+                  False 时只绘制带文字的米字格行。
+    """
+
+    # 章节最后一行时填充空白格子，补满整行
     if is_last_line and len(line_text) < max_chars_per_line:
         # 扩展行到最大长度（用None表示空白）
         padded_chars = list(line_text) + [None] * (max_chars_per_line - len(line_text))
@@ -359,7 +374,11 @@ def draw_line_with_padding(canvas_obj, line_text, max_chars_per_line, x_start, y
 
         x_pos += grid_size + grid_gap
 
-    # 第二行：绘制空白米字格
+    # 不绘制练习行时，下一行直接从本行文字格底部开始
+    if not practice_row:
+        return y_row1
+
+    # 第二行：绘制练习用空白米字格
     x_pos = x_start
     y_row2 = y_row1 - grid_size  # row_gap=0，直接相邻
     for _ in padded_chars:
@@ -368,7 +387,14 @@ def draw_line_with_padding(canvas_obj, line_text, max_chars_per_line, x_start, y
 
     return y_row2  # 返回下一行的起始Y坐标
 
-def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
+def generate_full_pdf(filename="daodejing_full_calligraphy.pdf", practice_row=None):
+    """生成2cm格子版本
+
+    practice_row: 是否绘制练习用空白米字格行。None = 使用全局开关 ADD_PRACTICE_ROW。
+    """
+    if practice_row is None:
+        practice_row = ADD_PRACTICE_ROW
+
     page_width, page_height = a4
     c = NumberedCanvas(filename, pagesize=a4)
 
@@ -414,7 +440,7 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
         sys.stdout.flush()
 
         for line_text in lines:
-            needed_height = (grid_size * 2) + row_gap
+            needed_height = (grid_size * 2 + row_gap) if practice_row else grid_size
             if current_y - needed_height < margin_top:
                 c.showPage()
                 current_y = page_height - margin_top
@@ -431,13 +457,16 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
                     c.drawString(text_x, text_y, char)
                 x_pos += grid_size + grid_gap
 
-            x_pos = margin_left
-            y_pos_row2 = y_pos_row1 - grid_size
-            for _ in line_text:
-                draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
-                x_pos += grid_size + grid_gap
-
-            current_y = y_pos_row2 - row_gap
+            if practice_row:
+                # 第二行：练习用空白米字格
+                x_pos = margin_left
+                y_pos_row2 = y_pos_row1 - grid_size
+                for _ in line_text:
+                    draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
+                    x_pos += grid_size + grid_gap
+                current_y = y_pos_row2 - row_gap
+            else:
+                current_y = y_pos_row1 - row_gap
 
         # 章节间距：最多空一行
         current_y -= row_gap  # 章节间距设置为行间距大小
@@ -445,8 +474,14 @@ def generate_full_pdf(filename="daodejing_full_calligraphy.pdf"):
     c.save()
     print(f"成功：{filename}")
 
-def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
-    """生成1.5cm格子版本"""
+def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf", practice_row=None):
+    """生成1.5cm格子版本
+
+    practice_row: 是否绘制练习用空白米字格行。None = 使用全局开关 ADD_PRACTICE_ROW。
+    """
+    if practice_row is None:
+        practice_row = ADD_PRACTICE_ROW
+
     page_width, page_height = a4
     c = NumberedCanvas(filename, pagesize=a4)
 
@@ -490,7 +525,7 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
         sys.stdout.flush()
 
         for line_text in lines:
-            needed_height = (grid_size * 2) + row_gap
+            needed_height = (grid_size * 2 + row_gap) if practice_row else grid_size
             if current_y - needed_height < margin_top:
                 c.showPage()
                 current_y = page_height - margin_top
@@ -507,13 +542,16 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
                     c.drawString(text_x, text_y, char)
                 x_pos += grid_size + grid_gap
 
-            x_pos = margin_left
-            y_pos_row2 = y_pos_row1 - grid_size
-            for _ in line_text:
-                draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
-                x_pos += grid_size + grid_gap
-
-            current_y = y_pos_row2 - row_gap
+            if practice_row:
+                # 第二行：练习用空白米字格
+                x_pos = margin_left
+                y_pos_row2 = y_pos_row1 - grid_size
+                for _ in line_text:
+                    draw_mi_zi_ge(c, x_pos, y_pos_row2, grid_size)
+                    x_pos += grid_size + grid_gap
+                current_y = y_pos_row2 - row_gap
+            else:
+                current_y = y_pos_row1 - row_gap
 
         # 章节间距：最多空一行
         current_y -= row_gap  # 章节间距设置为行间距大小
@@ -522,8 +560,15 @@ def generate_full_pdf_1_5cm(filename="daodejing_full_calligraphy_1_5cm.pdf"):
     print(f"成功生成1.5cm版本：{filename}")
 
 
-def generate_full_pdf_2_5cm(filename="daodejing_full_calligraphy_2_5cm.pdf"):
-    """生成2.5cm格子版本"""
+def generate_full_pdf_2_5cm(filename="daodejing_full_calligraphy_2_5cm.pdf", practice_row=None):
+    """生成2.5cm格子版本
+
+    practice_row: 是否绘制练习用空白米字格行。
+                  None（默认）= 使用全局配置开关 ADD_PRACTICE_ROW 的值。
+    """
+    if practice_row is None:
+        practice_row = ADD_PRACTICE_ROW
+
     page_width, page_height = a4
     c = NumberedCanvas(filename, pagesize=a4)
 
@@ -568,22 +613,26 @@ def generate_full_pdf_2_5cm(filename="daodejing_full_calligraphy_2_5cm.pdf"):
         sys.stdout.flush()
 
         # 逐行绘制，章节最后一行时进行空白填充
+        # 单行高度：有练习行时为两格，无练习行时只占一格
+        row_height = grid_size * 2 if practice_row else grid_size
+
         for line_idx, line_text in enumerate(lines):
             is_last_line = (line_idx == len(lines) - 1)
 
-            # 空间检查（行间距为0，只需要grid_size * 2的高度）
-            needed_height = grid_size * 2
+            # 空间检查
+            needed_height = row_height
             if current_y - needed_height < margin_top:
                 c.showPage()
                 current_y = page_height - margin_top
 
             # 绘制行（使用带填充的函数）
             y_pos_row1 = current_y - grid_size
-            y_row2 = draw_line_with_padding(c, line_text, max_chars_per_line,
+            y_next = draw_line_with_padding(c, line_text, max_chars_per_line,
                                            margin_left, y_pos_row1,
                                            grid_size, grid_gap, FONT_NAME, font_size,
-                                           is_last_line=is_last_line)
-            current_y = y_row2  # row_gap=0，直接使用y_row2
+                                           is_last_line=is_last_line,
+                                           practice_row=practice_row)
+            current_y = y_next  # row_gap=0，直接使用返回的下一行起点
 
         # 章节间距：半格高度
         chapter_gap = grid_size // 2
@@ -593,24 +642,55 @@ def generate_full_pdf_2_5cm(filename="daodejing_full_calligraphy_2_5cm.pdf"):
     print(f"成功生成2.5cm版本：{filename}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="生成《道德经》字帖 PDF（米字格描红/练习本）"
+    )
+    parser.add_argument(
+        "--size",
+        choices=["2cm", "1_5cm", "2_5cm"],
+        default=None,
+        help="只生成指定格子尺寸的版本（默认生成全部：2cm / 1.5cm / 2.5cm）",
+    )
+    parser.add_argument(
+        "--no-practice-row",
+        dest="practice_row",
+        action="store_false",
+        default=None,
+        help="不绘制练习用的空白米字格行，只保留带文字的描红行",
+    )
+    args = parser.parse_args()
+
+    # 命令行未显式指定时，回落到全局开关 ADD_PRACTICE_ROW
+    practice_row = ADD_PRACTICE_ROW if args.practice_row is None else args.practice_row
+
     print("开始生成《道德经》字帖...")
     print("=" * 50)
+    print(f"配置：绘制练习用空白米字格行 = {'是' if practice_row else '否'}")
+    print("=" * 50)
 
-    # 生成2cm格子版本
-    print("\n【1/3】生成2cm格子版本...")
-    generate_full_pdf()
+    if args.size in (None, "2cm"):
+        print("\n生成2cm格子版本...")
+        generate_full_pdf(practice_row=practice_row)
 
-    # 生成1.5cm格子版本
-    print("\n【2/3】生成1.5cm格子版本...")
-    generate_full_pdf_1_5cm()
+    if args.size in (None, "1_5cm"):
+        print("\n生成1.5cm格子版本...")
+        generate_full_pdf_1_5cm(practice_row=practice_row)
 
-    # 生成2.5cm格子版本
-    print("\n【3/3】生成2.5cm格子版本...")
-    generate_full_pdf_2_5cm()
+    if args.size in (None, "2_5cm"):
+        if practice_row:
+            filename_2_5cm = "daodejing_full_calligraphy_2_5cm.pdf"
+            label = "2.5cm格子版本（含练习行）"
+        else:
+            filename_2_5cm = "daodejing_full_calligraphy_2_5cm_no_practice.pdf"
+            label = "2.5cm格子版本（无练习行）"
+        print(f"\n生成{label}...")
+        generate_full_pdf_2_5cm(filename=filename_2_5cm, practice_row=practice_row)
 
     print("\n" + "=" * 50)
     print("所有版本生成完成！")
-    print("请查看当前目录下的PDF文件：")
-    print("- daodejing_full_calligraphy.pdf (2cm格子)")
-    print("- daodejing_full_calligraphy_1_5cm.pdf (1.5cm格子)")
-    print("- daodejing_full_calligraphy_2_5cm.pdf (2.5cm格子)")
+    print("请查看当前目录下生成的PDF文件。")
+    print("\n用法提示：")
+    print("  python generate_zitie.py                                  # 生成全部版本（含空白练习行）")
+    print("  python generate_zitie.py --no-practice-row                # 全部版本，去掉练习用空白行")
+    print("  python generate_zitie.py --size 2_5cm                     # 只生成2.5cm版本")
+    print("  python generate_zitie.py --size 2_5cm --no-practice-row   # 只生成2.5cm且无练习行")
